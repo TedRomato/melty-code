@@ -21,7 +21,7 @@ public:
   // holdMs > 0 → hold for that long, then ramp back to 0 %
   // acceleration = true  -> ramp via accelPercentPerSec in update()
   // acceleration = false -> apply instantly
-  void setSpeed(float percent, unsigned long holdMs = 0, bool acceleration = true);
+  void setSpeed(float percent, unsigned long holdMs = 0, bool acceleration = false);
 
   // Returns the currently applied speed (0–100 %) for each motor.
   float getLeftSpeed() const;
@@ -30,8 +30,8 @@ public:
   // Returns true only when both motors' current speeds are exactly 0%.
   bool areMotorsOff() const;
 
-  void setLeftSpeed(float percent, unsigned long holdMs = 0, bool acceleration = true);
-  void setRightSpeed(float percent, unsigned long holdMs = 0, bool acceleration = true);
+  void setLeftSpeed(float percent, unsigned long holdMs = 0, bool acceleration = false);
+  void setRightSpeed(float percent, unsigned long holdMs = 0, bool acceleration = false);
   void sweepSpeed(int fromUs, int toUs, unsigned long durationMs);
 
 private:

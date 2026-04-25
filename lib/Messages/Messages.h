@@ -13,12 +13,21 @@ enum class MsgKind : uint8_t {
 	ACCEL_OMEGA = 5,
 	RADIUS_CONFIG = 6,
 	ACCEL_CALIBRATE = 7,
+	INFO_REQUEST = 8,
+	INFO_RESPONSE = 9,
+	SETTINGS_REQUEST = 10,
+	SETTINGS_RESPONSE = 11,
+	PING = 12,  // Heartbeat ping from controller to keep melty alive
 };
 
 struct __attribute__((packed)) ControlMsg {
 	uint8_t kind; // MsgKind::CONTROL
+	uint8_t _reserved1; // Previously forwardEnabled, now unused (always treated as enabled)
+	uint16_t _reserved0; // padding/reserved for future flags (keeps floats aligned)
 	float leftPercent;
 	float rightPercent;
+	float headingMultiplier;
+	float motorLagDeg;
 };
 
 struct __attribute__((packed)) GyroConfigMsg {
@@ -63,4 +72,35 @@ struct __attribute__((packed)) AccelCalibrateMsg {
 struct __attribute__((packed)) RadiusConfigMsg {
 	uint8_t kind; // MsgKind::RADIUS_CONFIG
 	float radiusM;
+};
+
+// Request info from melty (telemetry data)
+struct __attribute__((packed)) InfoRequestMsg {
+	uint8_t kind; // MsgKind::INFO_REQUEST
+};
+
+// Response with telemetry info
+struct __attribute__((packed)) InfoResponseMsg {
+	uint8_t kind; // MsgKind::INFO_RESPONSE
+	float revPerSec;      // Rotations per second from accel
+	float updatesPerSec;  // Update rate on melty
+	int8_t signalStrength; // RSSI or similar
+};
+
+// Request settings from melty
+struct __attribute__((packed)) SettingsRequestMsg {
+	uint8_t kind; // MsgKind::SETTINGS_REQUEST
+};
+
+// Response with current settings
+struct __attribute__((packed)) SettingsResponseMsg {
+	uint8_t kind; // MsgKind::SETTINGS_RESPONSE
+	float radiusMm;       // Base radius in mm
+	uint8_t wifiChannel;  // WiFi channel
+	float motorOffsetDeg; // Motor offset in degrees
+};
+
+// Heartbeat ping from controller to keep melty alive
+struct __attribute__((packed)) PingMsg {
+	uint8_t kind; // MsgKind::PING
 };

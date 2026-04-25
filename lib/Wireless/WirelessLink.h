@@ -50,6 +50,7 @@ public:
     // User callbacks
     using DataCallback             = std::function<void(const uint8_t* data, size_t len)>;
     using ConnectCallback          = std::function<void()>;
+    using ConnectionLostCallback   = std::function<void()>;
 
 public:
     WirelessLink();
@@ -88,6 +89,21 @@ public:
     // Callback is invoked from update() (main context), never from ESP-NOW ISR.
     void setOnConnect(ConnectCallback cb);
 
+    // === Heartbeat & Connection Loss ===
+    // Set connection lost timeout in ms (0 = disabled, default)
+    // When no data received for this duration after being connected, onConnectionLost is called
+    void setConnectionLostTimeout(uint32_t timeoutMs);
+    
+    // Set callback for when connection is lost (no data for connectionLostTimeout)
+    void setOnConnectionLost(ConnectionLostCallback cb);
+    
+    // Start periodic heartbeat pings to keep connection alive
+    // periodMs = interval between pings (0 = use default 2500ms)
+    void runHeartbeat(uint32_t periodMs = 0);
+    
+    // Check if connection is considered lost (for UI)
+    bool isConnectionLost() const;
+
     // True once we've received a PONG from the peer.
     bool isConnected() const;
 
@@ -118,12 +134,24 @@ private:
     // Callbacks
     DataCallback             _onData       = nullptr;
     ConnectCallback          _onConnect    = nullptr;
+    ConnectionLostCallback   _onConnectionLost = nullptr;
 
     // Connection state
     bool _connected = false;
     bool _connectNotified = false;
     uint32_t _lastPingMs = 0;
     uint32_t _pingIntervalMs = 200;
+    
+    // Heartbeat configuration
+    bool _heartbeatEnabled = false;
+    uint32_t _heartbeatIntervalMs = 2500;
+    uint32_t _lastHeartbeatMs = 0;
+    
+    // Connection loss detection
+    uint32_t _connectionLostTimeMs = 0;  // 0 = disabled
+    uint32_t _lastRxMs = 0;
+    bool _connectionLost = false;
+    bool _connectionLostNotified = false;
 
     // Sequence number for user data (for debugging / future use)
     uint16_t _seqCounter = 0;
@@ -163,6 +191,8 @@ private:
 
     bool sendPacket(MsgType type, const void* data, size_t len);
     void processPings(uint32_t nowMs);
+    void processHeartbeat(uint32_t nowMs);
+    void checkConnectionLost(uint32_t nowMs);
 
     bool setChannelInternal(int ch);
     bool initEspNow();

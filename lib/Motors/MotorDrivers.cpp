@@ -80,6 +80,7 @@ void MotorDrivers::update() {
 	stepMotor(_leftCurrent, _leftTarget, nowMs, dt);
 	stepMotor(_rightCurrent, _rightTarget, nowMs, dt);
 
+	// Serial.printf("Motor update: left=%d us right=%d us (left=%.2f%% right=%.2f%%)\n", percentToUs(_leftCurrent), percentToUs(_rightCurrent), _leftCurrent, _rightCurrent);
 	_leftEsc.writeMicroseconds(percentToUs(_leftCurrent));
 	_rightEsc.writeMicroseconds(percentToUs(_rightCurrent));
 }

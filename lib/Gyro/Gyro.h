@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <functional>
 
 class Gyro {
 public:
@@ -88,13 +89,15 @@ public:
 	// Measures gyro bias for the specified duration (default 5s) and stores it.
 	// Subsequent gyro reads (readGyro and readAll gyro portion) subtract this bias.
 	// Returns true if at least one sample was captured.
-	bool calibrate(uint32_t durationMs = 5000);
+	bool calibrate(uint32_t durationMs = 1000);
 
 	// Measures accel bias for the specified duration (default 5s) and stores it.
 	// Subsequent accel reads (readAccel and readAll accel portion) subtract X/Y bias only.
 	// Z axis is intentionally left untouched.
 	// Returns true if at least one sample was captured.
-	bool calibrateAccel(uint32_t durationMs = 5000);
+	// Optional callback is called periodically (~every 50ms) to allow keeping radio alive.
+	using CalibrationCallback = std::function<void()>;
+	bool calibrateAccel(uint32_t durationMs = 1000, CalibrationCallback periodicCallback = nullptr);
 
 	AccelRaw readAccel();
 	GyroRaw readGyro();

@@ -17,7 +17,7 @@ void setup() {
 	const int SCL_PIN = 6;
 	const bool ok = gyro.init(SDA_PIN, SCL_PIN, 0x68, 100000);
 	Serial.printf("gyro.init: %s\n", ok ? "OK" : "FAIL");
-	gyro.calibrateAccel(5000);
+	gyro.calibrateAccel(1000);
 	Serial.println("Accel calibrated.");
 }
 

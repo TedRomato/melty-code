@@ -166,7 +166,7 @@ bool Gyro::calibrate(uint32_t durationMs) {
 	return true;
 }
 
-bool Gyro::calibrateAccel(uint32_t durationMs) {
+bool Gyro::calibrateAccel(uint32_t durationMs, CalibrationCallback periodicCallback) {
 	if (!_initialized) {
 		_accelBiasX = 0;
 		_accelBiasY = 0;
@@ -182,6 +182,9 @@ bool Gyro::calibrateAccel(uint32_t durationMs) {
 	uint32_t samples = 0;
 
 	const uint32_t start = millis();
+	uint32_t lastCallbackMs = start;
+	constexpr uint32_t kCallbackIntervalMs = 50;  // Call callback every 50ms
+	
 	while ((millis() - start) < durationMs) {
 		uint8_t buf[6] = {0};
 		if (readBytes(REG_ACCEL_XOUT_H, buf, sizeof(buf))) {
@@ -190,6 +193,13 @@ bool Gyro::calibrateAccel(uint32_t durationMs) {
 			sumX += x;
 			sumY += y;
 			samples++;
+		}
+
+		// Call periodic callback to keep radio/other systems alive
+		const uint32_t nowMs = millis();
+		if (periodicCallback && (nowMs - lastCallbackMs >= kCallbackIntervalMs)) {
+			lastCallbackMs = nowMs;
+			periodicCallback();
 		}
 
 		// Don't hammer the bus; ~200 Hz max.

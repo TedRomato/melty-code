@@ -97,6 +97,25 @@ void WirelessLink::setOnConnect(ConnectCallback cb) {
 	_onConnect = std::move(cb);
 }
 
+void WirelessLink::setConnectionLostTimeout(uint32_t timeoutMs) {
+	_connectionLostTimeMs = timeoutMs;
+}
+
+void WirelessLink::setOnConnectionLost(ConnectionLostCallback cb) {
+	_onConnectionLost = std::move(cb);
+}
+
+void WirelessLink::runHeartbeat(uint32_t periodMs) {
+	_heartbeatEnabled = true;
+	if (periodMs > 0) {
+		_heartbeatIntervalMs = periodMs;
+	}
+}
+
+bool WirelessLink::isConnectionLost() const {
+	return _connectionLost;
+}
+
 bool WirelessLink::isConnected() const {
 	return _connected;
 }
@@ -106,7 +125,10 @@ void WirelessLink::update() {
 		return;
 	}
 
-	processPings(millis());
+	const uint32_t nowMs = millis();
+	processPings(nowMs);
+	processHeartbeat(nowMs);
+	checkConnectionLost(nowMs);
 
 	// Drain event queue
 	while (_eventTail != _eventHead) {
@@ -186,6 +208,16 @@ void WirelessLink::handleRecv(const uint8_t* mac, const uint8_t* data, int len) 
 	if (std::memcmp(mac, _peerMac, 6) != 0) {
 		return;
 	}
+	
+	// Track last receive time for connection loss detection
+	_lastRxMs = millis();
+	
+	// Reset connection lost state if we were disconnected
+	if (_connectionLost) {
+		_connectionLost = false;
+		_connectionLostNotified = false;
+		Serial.println("WirelessLink: Connection restored");
+	}
 
 	const auto* header = reinterpret_cast<const PacketHeader*>(data);
 	const size_t payloadLen = header->payloadLen;
@@ -261,6 +293,42 @@ void WirelessLink::processPings(uint32_t nowMs) {
 	if (_lastPingMs == 0 || (nowMs - _lastPingMs) >= _pingIntervalMs) {
 		_lastPingMs = nowMs;
 		(void)sendPacket(MsgType::PING, nullptr, 0);
+	}
+}
+
+void WirelessLink::processHeartbeat(uint32_t nowMs) {
+	// Only send heartbeat if enabled and connected
+	if (!_heartbeatEnabled || !_connected) {
+		return;
+	}
+	
+	if (_lastHeartbeatMs == 0 || (nowMs - _lastHeartbeatMs) >= _heartbeatIntervalMs) {
+		_lastHeartbeatMs = nowMs;
+		(void)sendPacket(MsgType::PING, nullptr, 0);
+	}
+}
+
+void WirelessLink::checkConnectionLost(uint32_t nowMs) {
+	// Skip if disabled or never received anything or not yet connected
+	if (_connectionLostTimeMs == 0 || _lastRxMs == 0 || !_connected) {
+		return;
+	}
+	
+	// Skip if already notified
+	if (_connectionLostNotified) {
+		return;
+	}
+	
+	// Check if timeout exceeded
+	if ((nowMs - _lastRxMs) >= _connectionLostTimeMs) {
+		_connectionLost = true;
+		_connectionLostNotified = true;
+		Serial.printf("WirelessLink: Connection lost - no data for %lu ms\n", 
+			(unsigned long)_connectionLostTimeMs);
+		
+		if (_onConnectionLost) {
+			_onConnectionLost();
+		}
 	}
 }
 
