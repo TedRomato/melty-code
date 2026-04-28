@@ -25,6 +25,7 @@ state = {
 active_point = None
 drag_radius = 7.0
 show_state = False
+_loading = False
 last_weapon_com = np.array([0.0, 0.0])
 last_comp_com = np.array([0.0, 0.0])
 
@@ -71,17 +72,19 @@ def export_config(event=None):
 
 
 def load_config(event=None):
-    global active_point
+    global active_point, _loading
 
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     load_jsonable(data)
 
+    _loading = True
     radius_slider.set_val(state["R"] * 2)
     weapon_slider.set_val(state["weapon_arc_r"])
     comp_slider.set_val(state["comp_arc_r"])
     grid_slider.set_val(state["grid_step"])
+    _loading = False
 
     active_point = None
     draw()
@@ -578,7 +581,8 @@ def on_release(event):
 
 
 def on_slider_change(value):
-    draw()
+    if not _loading:
+        draw()
 
 
 def toggle_state(event=None):
