@@ -24,8 +24,9 @@ static constexpr int kLeftEscPin = 6;
 static constexpr int kRightEscPin = 7;
 
 // ESC pulse range; tune for your ESCs.
-static constexpr int kEscMinUs = 1000;
-static constexpr int kEscMaxUs = 1750;
+static constexpr int kEscReverseUs = 1012;
+static constexpr int kEscNeutralUs = 1488;
+static constexpr int kEscForwardUs = 2020;
 static constexpr int kEscArmMs = 10000;
 static constexpr float kEscAccelPercentPerSec = 250.0f;
 
@@ -75,7 +76,7 @@ static bool ledIsOn = false;
 static uint32_t ledOffAtMs = 0;
 
 static float clampPercent(float p) {
-  if (p < 0.0f) return 0.0f;
+  if (p < -100.0f) return -100.0f;
   if (p > 100.0f) return 100.0f;
   return p;
 }
@@ -272,7 +273,7 @@ void setup() {
 
   // Motors
   Serial.println("\nInitializing motors...");  
-  motors.init(kEscMinUs, kEscMaxUs, kEscArmMs, kEscAccelPercentPerSec);
+  motors.init(kEscReverseUs, kEscNeutralUs, kEscForwardUs, kEscArmMs, kEscAccelPercentPerSec);
   Serial.println("\nMotors initialized.");
   delay(2000); // wait a bit before spinning
   motors.setSpeed(50.0f, 4000, false); // test spin for 2s

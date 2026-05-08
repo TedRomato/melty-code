@@ -30,7 +30,7 @@ void Controller::setForwardSpeed(float percent) {
 }
 
 void Controller::setMotorPower(float percent) {
-	_motorPower = clamp(percent, 0.0f, 100.0f);
+	_motorPower = clamp(percent, -100.0f, 100.0f);
 	_controlDirty = true;
 }
 
@@ -93,7 +93,7 @@ bool Controller::loadSettings() {
 	// Validate
 	if (_baseRadiusMm < 0.4f) _baseRadiusMm = 0.4f;
 	_motorOffsetDeg = clamp(_motorOffsetDeg, -180.0f, 180.0f);
-	_motorPower = clamp(_motorPower, 0.0f, 100.0f);
+	_motorPower = clamp(_motorPower, -100.0f, 100.0f);
 	
 	// Mark as dirty to send to robot on connect
 	_radiusDirty = true;
@@ -269,7 +269,7 @@ void Controller::sendControl() {
 	if (!_radio.isConnected()) return;
 
 	// In fight mode: 100% power, 0% forward (headingMultiplier = 0)
-	float power = _fightMode ? 50.0f : _motorPower;
+	float power = _fightMode ? ((_motorPower < 0.0f) ? -50.0f : 50.0f) : _motorPower;
 	float headingMult = _fightMode ? 0.0f : computeHeadingMultiplier();
 
 	ControlMsg msg{};
@@ -322,6 +322,4 @@ float Controller::clamp(float val, float minVal, float maxVal) {
 	if (val > maxVal) return maxVal;
 	return val;
 }
-
-
 

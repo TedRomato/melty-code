@@ -1,13 +1,14 @@
 import json
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider, Button
+from matplotlib.widgets import Slider, Button, TextBox
 
 
 CONFIG_FILE = "weapon_config.json"
 
 state = {
     "R": 45.0,
+    "wall_width": 3.0,
 
     "w_p1": np.array([38.97, 22.5]),
     "w_p2": np.array([22.5, 38.97]),
@@ -18,6 +19,10 @@ state = {
 
     "weapon_arc_r": 40.5,
     "comp_arc_r": 40.5,
+
+    # False -> compensation rests on the outer circle (radius R)
+    # True  -> compensation rests on the inner circle (radius R - wall_width)
+    "comp_inside": False,
 }
 
 active_point = None
@@ -35,6 +40,7 @@ last_comp_com = np.array([0.0, 0.0])
 def state_to_jsonable():
     return {
         "R": float(state["R"]),
+        "wall_width": float(state["wall_width"]),
         "w_p1": state["w_p1"].tolist(),
         "w_p2": state["w_p2"].tolist(),
         "w_tip": state["w_tip"].tolist(),
@@ -42,11 +48,13 @@ def state_to_jsonable():
         "c_p2": state["c_p2"].tolist(),
         "weapon_arc_r": float(state["weapon_arc_r"]),
         "comp_arc_r": float(state["comp_arc_r"]),
+        "comp_inside": bool(state["comp_inside"]),
     }
 
 
 def load_jsonable(data):
     state["R"] = float(data["R"])
+    state["wall_width"] = float(data.get("wall_width", 3.0))
     state["w_p1"] = np.array(data["w_p1"], dtype=float)
     state["w_p2"] = np.array(data["w_p2"], dtype=float)
     state["w_tip"] = np.array(data["w_tip"], dtype=float)
@@ -54,11 +62,12 @@ def load_jsonable(data):
     state["c_p2"] = np.array(data["c_p2"], dtype=float)
     state["weapon_arc_r"] = float(data["weapon_arc_r"])
     state["comp_arc_r"] = float(data["comp_arc_r"])
+    state["comp_inside"] = bool(data.get("comp_inside", False))
 
     state["w_p1"] = project_to_circle(state["w_p1"], state["R"])
     state["w_p2"] = project_to_circle(state["w_p2"], state["R"])
-    state["c_p1"] = project_to_circle(state["c_p1"], state["R"])
-    state["c_p2"] = project_to_circle(state["c_p2"], state["R"])
+    state["c_p1"] = project_to_circle(state["c_p1"], comp_radius())
+    state["c_p2"] = project_to_circle(state["c_p2"], comp_radius())
 
 
 def export_config(event=None):
@@ -76,7 +85,8 @@ def load_config(event=None):
     load_jsonable(data)
 
     _loading = True
-    radius_slider.set_val(state["R"] * 2)
+    radius_textbox.set_val(f"{state['R'] * 2:.3f}")
+    wall_textbox.set_val(f"{state['wall_width']:.3f}")
     weapon_slider.set_val(state["weapon_arc_r"])
     comp_slider.set_val(state["comp_arc_r"])
     _loading = False
@@ -95,6 +105,13 @@ def project_to_circle(p, R):
     if n < 1e-9:
         return np.array([R, 0.0])
     return p / n * R
+
+
+def comp_radius():
+    """Radius of the circle on which the compensation rests."""
+    if state["comp_inside"]:
+        return max(state["R"] - state["wall_width"], 1e-6)
+    return state["R"]
 
 
 def angle_of(p):
@@ -175,7 +192,8 @@ def build_weapon_outline(s):
 
 
 def build_comp_outline(s):
-    base = circle_arc_points(s["c_p2"], s["c_p1"], s["R"], direction="ccw")
+    cr = comp_radius()
+    base = circle_arc_points(s["c_p2"], s["c_p1"], cr, direction="ccw")
     outer_arc = arc_between_points(s["c_p1"], s["c_p2"], s["comp_arc_r"], side=-1)
     return np.vstack([base, outer_arc])
 
@@ -226,8 +244,9 @@ def build_weapon_segments(s):
 
 
 def build_comp_segments(s):
+    cr = comp_radius()
     return [
-        base_circle_segment(s["c_p2"], s["c_p1"], s["R"], direction="ccw"),
+        base_circle_segment(s["c_p2"], s["c_p1"], cr, direction="ccw"),
         free_arc_or_line_segment(s["c_p1"], s["c_p2"], s["comp_arc_r"], side=-1),
     ]
 
@@ -399,6 +418,8 @@ def state_text():
     return (
         "EXACT STATE\n"
         f"R: {state['R']:.3f}\n"
+        f"wall_width: {state['wall_width']:.3f}\n"
+        f"comp_inside: {state['comp_inside']}\n"
         f"weapon_arc_r: {state['weapon_arc_r']:.3f}\n"
         f"comp_arc_r:   {state['comp_arc_r']:.3f}\n\n"
         f"w_p1 : {state['w_p1']}\n"
@@ -448,11 +469,14 @@ fig = plt.figure(figsize=(15, 9))
 ax_text = fig.add_axes([0.02, 0.18, 0.30, 0.78])
 ax = fig.add_axes([0.35, 0.18, 0.62, 0.78])
 
-ax_radius = fig.add_axes([0.40, 0.100, 0.40, 0.025])
+# Number inputs (top row of controls): base diameter D and wall width
+ax_radius_text = fig.add_axes([0.46, 0.105, 0.08, 0.030])
+ax_wall_text = fig.add_axes([0.62, 0.105, 0.08, 0.030])
+ax_toggle_dir = fig.add_axes([0.74, 0.100, 0.21, 0.040])
+
 ax_weapon_r = fig.add_axes([0.40, 0.060, 0.40, 0.025])
 ax_comp_r = fig.add_axes([0.40, 0.020, 0.40, 0.025])
 
-ax_fine_radius = fig.add_axes([0.900, 0.100, 0.055, 0.025])
 ax_fine_weapon = fig.add_axes([0.900, 0.060, 0.055, 0.025])
 ax_fine_comp = fig.add_axes([0.900, 0.020, 0.055, 0.025])
 
@@ -461,11 +485,13 @@ ax_export = fig.add_axes([0.04, 0.08, 0.12, 0.04])
 ax_load = fig.add_axes([0.18, 0.08, 0.12, 0.04])
 ax_state_toggle = fig.add_axes([0.04, 0.025, 0.26, 0.04])
 
-radius_slider = Slider(ax_radius, "Base diameter D", 20, 300, valinit=state["R"] * 2, color="tab:blue")
+radius_textbox = TextBox(ax_radius_text, "Base diameter D ", initial=f"{state['R'] * 2:.3f}")
+wall_textbox = TextBox(ax_wall_text, "Wall width ", initial=f"{state['wall_width']:.3f}")
+toggle_dir_button = Button(ax_toggle_dir, "Toggle compensation direction", color="lightyellow")
+
 weapon_slider = Slider(ax_weapon_r, "Weapon arc radius", 5, 200, valinit=state["weapon_arc_r"], color="tab:red")
 comp_slider = Slider(ax_comp_r, "Comp arc radius", 5, 200, valinit=state["comp_arc_r"], color="tab:green")
 
-fine_radius_button = Button(ax_fine_radius, "Fine", color="lightyellow")
 fine_weapon_button = Button(ax_fine_weapon, "Fine", color="lightyellow")
 fine_comp_button = Button(ax_fine_comp, "Fine", color="lightyellow")
 
@@ -475,7 +501,6 @@ load_button = Button(ax_load, "Load JSON", color="lightgreen")
 state_button = Button(ax_state_toggle, "Show / Hide Exact State", color="lightgray")
 
 _SLIDER_ORIG_RANGES = {
-    "radius": (20.0, 300.0),
     "weapon_r": (5.0, 200.0),
     "comp_r": (5.0, 200.0),
 }
@@ -540,19 +565,38 @@ def draw():
     ax_text.clear()
 
     old_R = state["R"]
-    new_R = radius_slider.val / 2
+    old_cr = comp_radius()
+
+    try:
+        new_R = float(radius_textbox.text) / 2
+        if new_R <= 0:
+            new_R = old_R
+    except ValueError:
+        new_R = old_R
+
+    try:
+        new_wall = float(wall_textbox.text)
+        if new_wall < 0:
+            new_wall = state["wall_width"]
+    except ValueError:
+        new_wall = state["wall_width"]
 
     state["R"] = new_R
+    state["wall_width"] = new_wall
     state["weapon_arc_r"] = weapon_slider.val
     state["comp_arc_r"] = comp_slider.val
 
     if abs(new_R - old_R) > 1e-9:
         state["w_p1"] = project_to_circle(state["w_p1"], new_R)
         state["w_p2"] = project_to_circle(state["w_p2"], new_R)
-        state["c_p1"] = project_to_circle(state["c_p1"], new_R)
-        state["c_p2"] = project_to_circle(state["c_p2"], new_R)
+
+    new_cr = comp_radius()
+    if abs(new_cr - old_cr) > 1e-9:
+        state["c_p1"] = project_to_circle(state["c_p1"], new_cr)
+        state["c_p2"] = project_to_circle(state["c_p2"], new_cr)
 
     R = state["R"]
+    inner_R = max(R - state["wall_width"], 0.0)
 
     weapon_outline = build_weapon_outline(state)
     comp_outline = build_comp_outline(state)
@@ -563,8 +607,11 @@ def draw():
     last_weapon_com = np.array([weapon_props["Cx"], weapon_props["Cy"]])
     last_comp_com = np.array([comp_props["Cx"], comp_props["Cy"]])
 
-    circle = plt.Circle((0, 0), R, fill=False, linewidth=2)
-    ax.add_patch(circle)
+    outer_circle = plt.Circle((0, 0), R, fill=False, linewidth=2, color="black")
+    ax.add_patch(outer_circle)
+    if inner_R > 1e-6:
+        inner_circle = plt.Circle((0, 0), inner_R, fill=False, linewidth=2, color="black")
+        ax.add_patch(inner_circle)
 
     ax.plot(weapon_outline[:, 0], weapon_outline[:, 1], linewidth=2.5, color="tab:red", label="weapon")
     ax.plot(comp_outline[:, 0], comp_outline[:, 1], linewidth=2.5, color="tab:green", label="counterweight")
@@ -692,8 +739,11 @@ def on_motion(event):
         angle = angle_of(mouse_xy) - angle_of(last_mouse_xy)
         rotate_comp(angle)
 
-    elif active_point in ["w_p1", "w_p2", "c_p1", "c_p2"]:
+    elif active_point in ["w_p1", "w_p2"]:
         state[active_point] = project_to_circle(mouse_xy, state["R"])
+
+    elif active_point in ["c_p1", "c_p2"]:
+        state[active_point] = project_to_circle(mouse_xy, comp_radius())
 
     elif active_point == "w_tip":
         state[active_point] = mouse_xy
@@ -719,18 +769,32 @@ def toggle_state(event=None):
     draw()
 
 
+def toggle_comp_direction(event=None):
+    state["comp_inside"] = not state["comp_inside"]
+    new_cr = comp_radius()
+    state["c_p1"] = project_to_circle(state["c_p1"], new_cr)
+    state["c_p2"] = project_to_circle(state["c_p2"], new_cr)
+    draw()
+
+
+def on_textbox_change(_text):
+    if not _loading:
+        draw()
+
+
 # =========================
 # Run
 # =========================
 
-radius_slider.on_changed(on_slider_change)
+radius_textbox.on_submit(on_textbox_change)
+wall_textbox.on_submit(on_textbox_change)
 weapon_slider.on_changed(on_slider_change)
 comp_slider.on_changed(on_slider_change)
 
-fine_radius_button.on_clicked(_make_fine_toggle("radius", radius_slider, fine_radius_button))
 fine_weapon_button.on_clicked(_make_fine_toggle("weapon_r", weapon_slider, fine_weapon_button))
 fine_comp_button.on_clicked(_make_fine_toggle("comp_r", comp_slider, fine_comp_button))
 
+toggle_dir_button.on_clicked(toggle_comp_direction)
 center_coms_button.on_clicked(center_coms)
 export_button.on_clicked(export_config)
 load_button.on_clicked(load_config)

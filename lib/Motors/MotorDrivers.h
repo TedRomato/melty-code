@@ -11,7 +11,7 @@ public:
   // minUs/maxUs = run range
   // armMs = how long to arm at 1000 us
   // accelPercentPerSec = max change in % per second
-  void init(int minUs, int maxUs, int armMs, float accelPercentPerSec);
+  void init(int kMinUs, int kNeutralUs, int kMaxUs, int armMs, float accelPercentPerSec);
 
   // call frequently in loop() to handle acceleration & timed speeds
   void update();
@@ -42,6 +42,7 @@ private:
   int _rightPin;
 
   int _minUs;
+  int _neutralUs; 
   int _maxUs;
 
   float _accelRate; // percent per second

@@ -6,7 +6,7 @@ namespace {
 constexpr int kArmPulseUs = 1000;
 
 static float clampPercent(float percent) {
-	if (percent < 0.0f) return 0.0f;
+	if (percent < -100.0f) return -100.0f;
 	if (percent > 100.0f) return 100.0f;
 	return percent;
 }
@@ -16,6 +16,7 @@ MotorDrivers::MotorDrivers(int leftPin, int rightPin)
 		: _leftPin(leftPin),
 			_rightPin(rightPin),
 			_minUs(1000),
+			_neutralUs(1500),
 			_maxUs(2000),
 			_accelRate(0.0f),
 			_leftCurrent(0.0f),
@@ -26,10 +27,20 @@ MotorDrivers::MotorDrivers(int leftPin, int rightPin)
 			_rightHoldUntil(0),
 			_lastUpdateMs(0) {}
 
-void MotorDrivers::init(int minUs, int maxUs, int armMs, float accelPercentPerSec) {
+void MotorDrivers::init(int minUs, int neutralUs, int maxUs, int armMs, float accelPercentPerSec) {
 	_minUs = minUs;
+	_neutralUs = neutralUs;
 	_maxUs = maxUs;
 	_accelRate = accelPercentPerSec;
+
+	if (_minUs > _maxUs) {
+		const int tmp = _minUs;
+		_minUs = _maxUs;
+		_maxUs = tmp;
+	}
+
+	if (_neutralUs < _minUs) _neutralUs = _minUs;
+	if (_neutralUs > _maxUs) _neutralUs = _maxUs;
 
 	// Use the same pulse bounds for attach so that writeMicroseconds() stays in-range.
 	_leftEsc.attach(_leftPin, _minUs, _maxUs);
@@ -161,39 +172,51 @@ void MotorDrivers::sweepSpeed(int fromUs, int toUs, unsigned long durationMs) {
 }
 
 int MotorDrivers::percentToUs(float percent) const {
-	const float p = clampPercent(percent);
-	const float span = static_cast<float>(_maxUs - _minUs);
-	const float usF = static_cast<float>(_minUs) + (span * (p / 100.0f));
+  const float p = clampPercent(percent);
 
-	int us = static_cast<int>(usF + 0.5f);
-	if (us < _minUs) us = _minUs;
-	if (us > _maxUs) us = _maxUs;
-	return us;
+  // Use a symmetric span around neutral so that +X% and -X% produce the
+  // same magnitude of pulse offset. The usable span is limited by whichever
+  // side of neutral is smaller, which keeps the mapping fully proportional
+  // to the distance from center even when min/neutral/max aren't symmetric.
+  const int forwardSpan = _maxUs - _neutralUs;
+  const int reverseSpan = _neutralUs - _minUs;
+  const int symmetricSpan =
+      (forwardSpan < reverseSpan) ? forwardSpan : reverseSpan;
+
+  const float usF = static_cast<float>(_neutralUs) +
+                    static_cast<float>(symmetricSpan) * (p / 100.0f);
+
+  int us = static_cast<int>(usF + (usF >= 0.0f ? 0.5f : -0.5f));
+
+  if (us < _minUs) us = _minUs;
+  if (us > _maxUs) us = _maxUs;
+
+  return us;
 }
 
 void MotorDrivers::stepMotor(float &current, float &target, unsigned long /*nowMs*/, float dt) {
-	target = clampPercent(target);
-	current = clampPercent(current);
+  target = clampPercent(target);
+  current = clampPercent(current);
 
-	if (dt <= 0.0f) {
-		return;
-	}
+  if (dt <= 0.0f) {
+    return;
+  }
 
-	// If no accel limit is configured, snap to target.
-	if (!isfinite(_accelRate) || _accelRate <= 0.0f) {
-		current = target;
-		return;
-	}
+  if (!isfinite(_accelRate) || _accelRate <= 0.0f) {
+    current = target;
+    return;
+  }
 
-	const float maxStep = _accelRate * dt;
-	const float delta = target - current;
-	if (fabsf(delta) <= maxStep) {
-		current = target;
-	} else {
-		current += (delta > 0.0f) ? maxStep : -maxStep;
-	}
+  const float maxStep = _accelRate * dt;
+  const float delta = target - current;
 
-	current = clampPercent(current);
+  if (fabsf(delta) <= maxStep) {
+    current = target;
+  } else {
+    current += (delta > 0.0f) ? maxStep : -maxStep;
+  }
+
+  current = clampPercent(current);
 }
 
 
